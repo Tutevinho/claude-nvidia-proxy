@@ -244,7 +244,15 @@ function Cleanup-OnFailure {
             }
         }
 
-        Start-Sleep -Seconds 2
+        # Change current directory away from installation directory
+        try {
+            Set-Location -Path $env:USERPROFILE -ErrorAction SilentlyContinue
+            Write-Log "Changed current directory to user profile"
+        } catch {
+            Write-Log "WARNING: Could not change directory: $_"
+        }
+
+        Start-Sleep -Seconds 3
     } catch {
         Write-Log "WARNING: Error stopping processes: $_"
     }
@@ -255,23 +263,43 @@ function Cleanup-OnFailure {
             Write-Log "Removing cloned repository..."
             # Try multiple methods to delete
             $attempts = 0
-            $maxAttempts = 3
+            $maxAttempts = 5
+            $removed = $false
 
-            while ($attempts -lt $maxAttempts) {
+            while ($attempts -lt $maxAttempts -and -not $removed) {
                 try {
+                    # Method 1: Standard Remove-Item
                     Remove-Item $installDir -Recurse -Force -ErrorAction Stop
-                    Write-Log "Repository removed."
+                    Write-Log "Repository removed using Remove-Item."
+                    $removed = $true
                     break
                 } catch {
                     $attempts++
+                    Write-Log "Attempt $attempts failed: $_"
+
                     if ($attempts -lt $maxAttempts) {
-                        Write-Log "Attempt $attempts failed, retrying in 2 seconds..."
-                        Start-Sleep -Seconds 2
-                    } else {
-                        Write-Log "WARNING: Could not remove repository after $maxAttempts attempts: $_"
-                        Write-Log "You may need to manually delete: $installDir"
+                        # Wait longer between attempts
+                        $waitTime = $attempts * 2
+                        Write-Log "Waiting ${waitTime} seconds before retry..."
+                        Start-Sleep -Seconds $waitTime
+
+                        # Try using robocopy to empty the directory first
+                        if ($attempts -eq 2) {
+                            Write-Log "Trying robocopy to empty directory..."
+                            $emptyDir = "$env:TEMP\empty_dir_$(Get-Random)"
+                            New-Item -ItemType Directory -Path $emptyDir -Force | Out-Null
+                            robocopy $emptyDir $installDir /MIR /R:0 /W:0 /NFL /NDL /NJH /NJS | Out-Null
+                            Remove-Item $emptyDir -Force -ErrorAction SilentlyContinue
+                            Start-Sleep -Seconds 2
+                        }
                     }
                 }
+            }
+
+            if (-not $removed) {
+                Write-Log "WARNING: Could not remove repository after $maxAttempts attempts"
+                Write-Log "You may need to manually delete: $installDir"
+                Write-Log "Or restart your computer and try again"
             }
         } catch {
             Write-Log "WARNING: Could not remove repository: $_"
@@ -299,6 +327,9 @@ function Get-UvPath {
         "$env:USERPROFILE\.cargo\bin\uv.exe",
         "$env:USERPROFILE\.local\bin\uv.exe",
         "$env:APPDATA\Python\Scripts\uv.exe",
+        "$env:APPDATA\Python\Python312\Scripts\uv.exe",
+        "$env:APPDATA\Python\Python311\Scripts\uv.exe",
+        "$env:APPDATA\Python\Python310\Scripts\uv.exe",
         "$env:LOCALAPPDATA\Programs\Python\Python312\Scripts\uv.exe",
         "$env:LOCALAPPDATA\Programs\Python\Python311\Scripts\uv.exe",
         "$env:LOCALAPPDATA\Programs\Python\Python310\Scripts\uv.exe",
@@ -455,6 +486,9 @@ function Start-Installation {
                             # List all Python Scripts directories
                             $scriptDirs = @(
                                 "$env:APPDATA\Python\Scripts",
+                                "$env:APPDATA\Python\Python312\Scripts",
+                                "$env:APPDATA\Python\Python311\Scripts",
+                                "$env:APPDATA\Python\Python310\Scripts",
                                 "$env:LOCALAPPDATA\Programs\Python\Python312\Scripts",
                                 "$env:LOCALAPPDATA\Programs\Python\Python311\Scripts",
                                 "$env:LOCALAPPDATA\Programs\Python\Python310\Scripts",
