@@ -294,7 +294,56 @@ function Start-Installation {
             Write-Log "uv is already installed. Version: $uvVersion"
         }
 
-        # Step 3: Clone repository
+        # Step 3: Install Git
+        Update-Progress 40 "Installing Git..."
+        Write-Log "Checking Git installation..."
+
+        if (-not (Test-Command "git")) {
+            try {
+                Write-Log "Git not found. Downloading Git installer..."
+                $gitUrl = "https://github.com/git-for-windows/git/releases/download/v2.47.0.windows.1/Git-2.47.0-64-bit.exe"
+                $gitInstaller = "$env:TEMP\git-installer.exe"
+
+                if (-not (Download-File $gitUrl $gitInstaller)) {
+                    throw "Could not download Git"
+                }
+
+                Write-Log "Installing Git (this may take several minutes)..."
+                Update-Progress 45 "Installing Git..."
+
+                $process = Start-Process $gitInstaller -ArgumentList "/VERYSILENT", "/NORESTART", "/NOCANCEL", "/SP-", "/DIR=`"C:\Program Files\Git`"", "/COMPONENTS=`"icons,ext\shellhere,assoc,assoc_sh`"" -Wait -PassThru
+
+                if ($process.ExitCode -ne 0) {
+                    throw "Error installing Git"
+                }
+
+                Write-Log "Git installed successfully."
+                Remove-Item $gitInstaller -Force
+
+                # Refresh PATH
+                $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+
+                # Wait for PATH to update
+                Start-Sleep -Seconds 3
+
+                # Verify installation
+                if (Test-Command "git") {
+                    $gitVersion = git --version 2>&1
+                    Write-Log "Git verified. Version: $gitVersion"
+                } else {
+                    Write-Log "WARNING: Git installation completed but command not found in PATH"
+                    Write-Log "You may need to restart your terminal or system"
+                }
+            } catch {
+                Write-Log "ERROR installing Git: $_"
+                throw "Failed to install Git. Please install Git manually from https://git-scm.com/download/win"
+            }
+        } else {
+            $gitVersion = git --version 2>&1
+            Write-Log "Git is already installed. Version: $gitVersion"
+        }
+
+        # Step 4: Clone repository
         Update-Progress 50 "Downloading claude-nvidia-proxy..."
         Write-Log "Cloning claude-nvidia-proxy repository..."
 
@@ -312,7 +361,7 @@ function Start-Installation {
 
         Write-Log "Repository cloned successfully."
 
-        # Step 4: Request API Key
+        # Step 5: Request API Key
         Update-Progress 70 "Configuring API Key..."
         Write-Log "Requesting NVIDIA NIM API Key..."
 
@@ -327,7 +376,7 @@ function Start-Installation {
 
         Write-Log "API Key received."
 
-        # Step 5: Configure .env
+        # Step 6: Configure .env
         Update-Progress 80 "Configuring environment..."
         Write-Log "Configuring .env file..."
 
@@ -401,7 +450,7 @@ ENABLE_FILEPATH_EXTRACTION_MOCK=true
         $envContent | Out-File -FilePath $envFile -Encoding UTF8
         Write-Log ".env file configured."
 
-        # Step 6: Create startup script
+        # Step 7: Create startup script
         Update-Progress 90 "Creating shortcuts..."
         Write-Log "Creating startup script..."
 
@@ -456,7 +505,7 @@ claude
         $batContent | Out-File -FilePath $batFile -Encoding ASCII
         Write-Log "Startup script created on Desktop."
 
-        # Step 7: Install dependencies
+        # Step 8: Install dependencies
         Update-Progress 95 "Installing Python dependencies..."
         Write-Log "Installing project dependencies..."
 
