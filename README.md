@@ -1,5 +1,25 @@
 # Free Claude Code Installer for Windows 11
 
+## ⚡ Quick Install (No Download Required)
+
+### 🚀 Install with One Command
+
+Copy and paste this command in PowerShell (Run as Administrator):
+
+```powershell
+irm https://raw.githubusercontent.com/Tutevinho/claude-nvidia-proxy/main/Installer-FreeClaudeCode.ps1 | iex
+```
+
+### 🗑️ Uninstall with One Command
+
+Copy and paste this command in PowerShell (Run as Administrator):
+
+```powershell
+irm https://raw.githubusercontent.com/Tutevinho/claude-nvidia-proxy/main/Uninstaller-FreeClaudeCode.ps1 | iex
+```
+
+---
+
 ## 🚀 Quick Start
 
 ### 3 Simple Steps to Get Started:
