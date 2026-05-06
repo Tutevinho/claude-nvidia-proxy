@@ -913,30 +913,61 @@ for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":8082 "') do (
 echo Starting Free Claude Code Server...
 start "Free Claude Code Server" cmd /k "cd /d %ROOT% && uv run uvicorn server:app --host 0.0.0.0 --port 8082"
 
-:: Wait for startup
+:: Wait for server to start with retries
 echo Waiting for server to start...
+set "MAX_ATTEMPTS=5"
+set "ATTEMPT=0"
+set "SERVER_STARTED=0"
+
+:check_server
+set /a "ATTEMPT+=1"
+echo Attempt %ATTEMPT% of %MAX_ATTEMPTS%...
+
+:: Wait 5 seconds
 timeout /t 5 >nul
 
-:: Verify server is responding
+:: Check if server is responding
 curl -s -o nul http://localhost:8082 >nul 2>&1
 if errorlevel 1 (
-    echo WARNING: Server may not have started correctly. Check the server window.
+    echo Server not responding yet...
+    if %ATTEMPT% lss %MAX_ATTEMPTS% (
+        goto check_server
+    ) else (
+        echo.
+        echo ERROR: Server failed to start after %MAX_ATTEMPTS% attempts.
+        echo.
+        echo Please check the server window for error messages.
+        echo.
+        echo Common issues:
+        echo - Port 8082 may be in use by another application
+        echo - NVIDIA NIM API key may be invalid
+        echo - Dependencies may not be installed correctly
+        echo.
+        echo Press any key to exit...
+        pause >nul
+        exit /b 1
+    )
+) else (
+    echo Server is responding!
+    set "SERVER_STARTED=1"
 )
 
 :: Start Claude in user directory
-set "ANTHROPIC_AUTH_TOKEN=freecc"
-set "ANTHROPIC_BASE_URL=http://localhost:8082"
+if %SERVER_STARTED%==1 (
+    set "ANTHROPIC_AUTH_TOKEN=freecc"
+    set "ANTHROPIC_BASE_URL=http://localhost:8082"
 
-where claude >nul 2>&1
-if errorlevel 1 (
-    echo ERROR: "claude" command is not installed or not in PATH.
-    echo Installing Claude Code CLI...
-    npm install -g @anthropic-ai/claude-code
+    where claude >nul 2>&1
+    if errorlevel 1 (
+        echo ERROR: "claude" command is not installed or not in PATH.
+        echo Installing Claude Code CLI...
+        npm install -g @anthropic-ai/claude-code
+    )
+
+    echo Opening Claude Code...
+    cd /d "%ROOT%"
+    claude
 )
-
-echo Opening Claude Code...
-cd /d "%ROOT%"
-claude
 "@
 
                 $batContent | Out-File -FilePath $batFile -Encoding ASCII
