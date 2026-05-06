@@ -203,11 +203,73 @@ function Get-NVIDIAAPIKey {
     return $null
 }
 
+# Function to cleanup on failure
+function Cleanup-OnFailure {
+    param([string]$reason)
+
+    Write-Log "=========================================="
+    Write-Log "INSTALLATION FAILED: $reason"
+    Write-Log "Cleaning up..."
+    Write-Log "=========================================="
+
+    $installDir = "$env:USERPROFILE\claude-nvidia-proxy"
+    $batFile = "$env:USERPROFILE\Desktop\ClaudeCode.bat"
+
+    # Remove cloned repository
+    if (Test-Path $installDir) {
+        try {
+            Write-Log "Removing cloned repository..."
+            Remove-Item $installDir -Recurse -Force
+            Write-Log "Repository removed."
+        } catch {
+            Write-Log "WARNING: Could not remove repository: $_"
+        }
+    }
+
+    # Remove desktop shortcut
+    if (Test-Path $batFile) {
+        try {
+            Write-Log "Removing desktop shortcut..."
+            Remove-Item $batFile -Force
+            Write-Log "Shortcut removed."
+        } catch {
+            Write-Log "WARNING: Could not remove shortcut: $_"
+        }
+    }
+
+    Write-Log "Cleanup completed."
+}
+
+# Function to refresh PATH
+function Refresh-Path {
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+
+    # Add common uv locations
+    $uvPaths = @(
+        "$env:USERPROFILE\.cargo\bin",
+        "$env:USERPROFILE\.local\bin",
+        "$env:APPDATA\Python\Scripts",
+        "$env:LOCALAPPDATA\Programs\Python\Python312\Scripts"
+    )
+
+    foreach ($path in $uvPaths) {
+        if (Test-Path $path) {
+            if ($env:Path -notlike "*$path*") {
+                $env:Path += ";$path"
+            }
+        }
+    }
+}
+
 # Main installation function
 function Start-Installation {
     $installButton.Enabled = $false
     $installButton.Text = "Installing..."
     $installButton.BackColor = [System.Drawing.Color]::FromArgb(150, 150, 150)
+
+    # Define installation paths
+    $installDir = "$env:USERPROFILE\claude-nvidia-proxy"
+    $batFile = "$env:USERPROFILE\Desktop\ClaudeCode.bat"
 
     try {
         # Step 1: Check/Install Python
@@ -237,8 +299,9 @@ function Start-Installation {
             Write-Log "Python installed successfully."
             Remove-Item $pythonInstaller -Force
 
-            # Update PATH
-            $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+            # Refresh PATH
+            Refresh-Path
+            Start-Sleep -Seconds 3
         } else {
             $pythonVersion = python --version 2>&1
             Write-Log "Python found: $pythonVersion"
@@ -255,39 +318,50 @@ function Start-Installation {
                 Write-Log "Running uv installer..."
                 $uvInstallScript.Content | Invoke-Expression
 
-                # Refresh PATH
-                $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-
-                # Wait a moment for PATH to update
-                Start-Sleep -Seconds 3
+                # Refresh PATH multiple times
+                Refresh-Path
+                Start-Sleep -Seconds 5
+                Refresh-Path
 
                 # Verify installation
-                if (Test-Command "uv") {
-                    $uvVersion = uv --version 2>&1
-                    Write-Log "uv installed successfully. Version: $uvVersion"
-                } else {
+                $uvFound = $false
+                for ($i = 0; $i -lt 3; $i++) {
+                    if (Test-Command "uv") {
+                        $uvFound = $true
+                        $uvVersion = uv --version 2>&1
+                        Write-Log "uv installed successfully. Version: $uvVersion"
+                        break
+                    }
+                    Write-Log "Attempt $($i + 1): uv not found in PATH, waiting..."
+                    Start-Sleep -Seconds 3
+                    Refresh-Path
+                }
+
+                if (-not $uvFound) {
                     Write-Log "WARNING: uv installation completed but command not found in PATH"
-                    Write-Log "You may need to restart your terminal or system"
+                    Write-Log "Attempting alternative installation method..."
+
+                    # Alternative: Try using pip if available
+                    if (Test-Command "pip") {
+                        Write-Log "Installing uv via pip..."
+                        pip install uv --user
+                        Refresh-Path
+                        Start-Sleep -Seconds 3
+
+                        if (Test-Command "uv") {
+                            $uvVersion = uv --version 2>&1
+                            Write-Log "uv installed successfully via pip. Version: $uvVersion"
+                        } else {
+                            throw "Failed to install uv via both methods"
+                        }
+                    } else {
+                        throw "Failed to install uv and pip not available"
+                    }
                 }
             } catch {
                 Write-Log "ERROR installing uv: $_"
-                Write-Log "Attempting alternative installation method..."
-
-                # Alternative: Try using pip if available
-                if (Test-Command "pip") {
-                    Write-Log "Installing uv via pip..."
-                    pip install uv --user
-                    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User") + ";" + "$env:USERPROFILE\AppData\Roaming\Python\Scripts"
-                    Start-Sleep -Seconds 2
-
-                    if (Test-Command "uv") {
-                        Write-Log "uv installed successfully via pip."
-                    } else {
-                        throw "Failed to install uv via both methods"
-                    }
-                } else {
-                    throw "Failed to install uv and pip not available"
-                }
+                Cleanup-OnFailure "uv installation failed"
+                throw
             }
         } else {
             $uvVersion = uv --version 2>&1
@@ -321,22 +395,31 @@ function Start-Installation {
                 Remove-Item $gitInstaller -Force
 
                 # Refresh PATH
-                $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-
-                # Wait for PATH to update
-                Start-Sleep -Seconds 3
+                Refresh-Path
+                Start-Sleep -Seconds 5
 
                 # Verify installation
-                if (Test-Command "git") {
-                    $gitVersion = git --version 2>&1
-                    Write-Log "Git verified. Version: $gitVersion"
-                } else {
+                $gitFound = $false
+                for ($i = 0; $i -lt 3; $i++) {
+                    if (Test-Command "git") {
+                        $gitFound = $true
+                        $gitVersion = git --version 2>&1
+                        Write-Log "Git verified. Version: $gitVersion"
+                        break
+                    }
+                    Write-Log "Attempt $($i + 1): git not found in PATH, waiting..."
+                    Start-Sleep -Seconds 3
+                    Refresh-Path
+                }
+
+                if (-not $gitFound) {
                     Write-Log "WARNING: Git installation completed but command not found in PATH"
                     Write-Log "You may need to restart your terminal or system"
                 }
             } catch {
                 Write-Log "ERROR installing Git: $_"
-                throw "Failed to install Git. Please install Git manually from https://git-scm.com/download/win"
+                Cleanup-OnFailure "Git installation failed"
+                throw
             }
         } else {
             $gitVersion = git --version 2>&1
@@ -347,16 +430,26 @@ function Start-Installation {
         Update-Progress 50 "Downloading claude-nvidia-proxy..."
         Write-Log "Cloning claude-nvidia-proxy repository..."
 
-        $installDir = "$env:USERPROFILE\claude-nvidia-proxy"
-
         if (Test-Path $installDir) {
             Write-Log "Directory already exists, removing..."
-            Remove-Item $installDir -Recurse -Force
+            try {
+                Remove-Item $installDir -Recurse -Force
+            } catch {
+                Write-Log "ERROR: Could not remove existing directory: $_"
+                Cleanup-OnFailure "Could not remove existing directory"
+                throw
+            }
         }
 
-        $gitResult = git clone https://github.com/Tutevinho/claude-nvidia-proxy.git $installDir 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            throw "Error cloning repository: $gitResult"
+        try {
+            $gitResult = git clone https://github.com/Tutevinho/claude-nvidia-proxy.git $installDir 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                throw "Error cloning repository: $gitResult"
+            }
+        } catch {
+            Write-Log "ERROR: Failed to clone repository: $_"
+            Cleanup-OnFailure "Repository cloning failed"
+            throw
         }
 
         Write-Log "Repository cloned successfully."
@@ -367,10 +460,14 @@ function Start-Installation {
 
         $apiKey = Get-NVIDIAAPIKey
         if ([string]::IsNullOrEmpty($apiKey)) {
+            Write-Log "ERROR: No API Key provided"
+            Cleanup-OnFailure "No API Key provided"
             throw "No API Key provided"
         }
 
         if (-not $apiKey.StartsWith("nvapi-")) {
+            Write-Log "ERROR: API Key must start with 'nvapi-'"
+            Cleanup-OnFailure "Invalid API Key format"
             throw "API Key must start with 'nvapi-'"
         }
 
@@ -380,8 +477,9 @@ function Start-Installation {
         Update-Progress 80 "Configuring environment..."
         Write-Log "Configuring .env file..."
 
-        $envFile = "$installDir\.env"
-        $envContent = @"
+        try {
+            $envFile = "$installDir\.env"
+            $envContent = @"
 # NVIDIA NIM Config
 NVIDIA_NIM_API_KEY="$apiKey"
 
@@ -447,14 +545,23 @@ ENABLE_SUGGESTION_MODE_SKIP=true
 ENABLE_FILEPATH_EXTRACTION_MOCK=true
 "@
 
-        $envContent | Out-File -FilePath $envFile -Encoding UTF8
-        Write-Log ".env file configured."
+            $envContent | Out-File -FilePath $envFile -Encoding UTF8
+            Write-Log ".env file configured."
+        } catch {
+            Write-Log "ERROR: Failed to configure .env file: $_"
+            Cleanup-OnFailure ".env configuration failed"
+            throw
+        }
 
         # Step 7: Create startup script
         Update-Progress 90 "Creating shortcuts..."
         Write-Log "Creating startup script..."
 
-        $batContent = @"
+        try {
+            if (Test-Path $batFile) {
+                Write-Log "Desktop shortcut already exists, skipping creation."
+            } else {
+                $batContent = @"
 @echo off
 setlocal
 
@@ -501,22 +608,35 @@ cd /d "%ROOT%"
 claude
 "@
 
-        $batFile = "$env:USERPROFILE\Desktop\ClaudeCode.bat"
-        $batContent | Out-File -FilePath $batFile -Encoding ASCII
-        Write-Log "Startup script created on Desktop."
+                $batContent | Out-File -FilePath $batFile -Encoding ASCII
+                Write-Log "Startup script created on Desktop."
+            }
+        } catch {
+            Write-Log "ERROR: Failed to create startup script: $_"
+            Cleanup-OnFailure "Startup script creation failed"
+            throw
+        }
 
         # Step 8: Install dependencies
         Update-Progress 95 "Installing Python dependencies..."
         Write-Log "Installing project dependencies..."
 
-        Push-Location $installDir
-        $syncResult = uv sync 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Write-Log "WARNING: Some dependencies may not have installed: $syncResult"
-        } else {
-            Write-Log "Dependencies installed successfully."
+        try {
+            Push-Location $installDir
+            $syncResult = uv sync 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Log "WARNING: Some dependencies may not have installed: $syncResult"
+                Write-Log "You may need to run 'uv sync' manually in the installation directory"
+            } else {
+                Write-Log "Dependencies installed successfully."
+            }
+            Pop-Location
+        } catch {
+            Write-Log "ERROR: Failed to install dependencies: $_"
+            Write-Log "You may need to run 'uv sync' manually in: $installDir"
+            # Don't cleanup on dependency failure, as the installation is mostly complete
+            Write-Log "Installation completed with warnings."
         }
-        Pop-Location
 
         # Successful completion
         Update-Progress 100 "Installation completed!"
@@ -548,8 +668,14 @@ claude
         Write-Log "ERROR: $_"
         Write-Log "=========================================="
 
+        # Cleanup if not already done
+        if (Test-Path $installDir) {
+            Write-Log "Performing cleanup due to installation failure..."
+            Cleanup-OnFailure "Installation failed: $_"
+        }
+
         [System.Windows.Forms.MessageBox]::Show(
-            "Error during installation:`n`n$_`n`nCheck the log for more details.",
+            "Error during installation:`n`n$_`n`nAll installed files have been cleaned up.`n`nCheck the log for more details.",
             "Installation Error",
             "OK",
             "Error"
