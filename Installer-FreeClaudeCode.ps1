@@ -731,6 +731,9 @@ setlocal
 
 set "ROOT=%USERPROFILE%\claude-nvidia-proxy"
 
+:: Add virtual environment Scripts to PATH (most important)
+set "PATH=%ROOT%\.venv\Scripts;%PATH%"
+
 :: Add Python Scripts to PATH
 set "PATH=%PATH%;%APPDATA%\Python\Scripts"
 set "PATH=%PATH%;%APPDATA%\Python\Python312\Scripts"
@@ -748,6 +751,13 @@ if exist "$uvDir" (
 :: Validations
 if not exist "%ROOT%" (
     echo ERROR: Directory %ROOT% does not exist
+    pause & exit /b 1
+)
+
+:: Check if virtual environment exists
+if not exist "%ROOT%\.venv\Scripts" (
+    echo ERROR: Virtual environment not found at %ROOT%\.venv\Scripts
+    echo Please run 'uv sync' in the installation directory first
     pause & exit /b 1
 )
 
