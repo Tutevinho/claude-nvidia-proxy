@@ -215,12 +215,64 @@ function Cleanup-OnFailure {
     $installDir = "$env:USERPROFILE\claude-nvidia-proxy"
     $batFile = "$env:USERPROFILE\Desktop\ClaudeCode.bat"
 
+    # Stop any running processes
+    try {
+        Write-Log "Stopping any running processes..."
+        # Stop processes using port 8082
+        $processes = Get-NetTCPConnection -LocalPort 8082 -ErrorAction SilentlyContinue
+        if ($processes) {
+            foreach ($proc in $processes) {
+                try {
+                    $process = Get-Process -Id $proc.OwningProcess -ErrorAction SilentlyContinue
+                    if ($process) {
+                        Write-Log "Stopping process $($process.ProcessName) (PID: $($process.Id))"
+                        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                    }
+                } catch {
+                    # Ignore errors when stopping processes
+                }
+            }
+        }
+
+        # Stop any python processes in the installation directory
+        if (Test-Path $installDir) {
+            Get-Process -Name python -ErrorAction SilentlyContinue | Where-Object {
+                $_.Path -like "$installDir*"
+            } | ForEach-Object {
+                Write-Log "Stopping Python process (PID: $($_.Id))"
+                Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+            }
+        }
+
+        Start-Sleep -Seconds 2
+    } catch {
+        Write-Log "WARNING: Error stopping processes: $_"
+    }
+
     # Remove cloned repository
     if (Test-Path $installDir) {
         try {
             Write-Log "Removing cloned repository..."
-            Remove-Item $installDir -Recurse -Force
-            Write-Log "Repository removed."
+            # Try multiple methods to delete
+            $attempts = 0
+            $maxAttempts = 3
+
+            while ($attempts -lt $maxAttempts) {
+                try {
+                    Remove-Item $installDir -Recurse -Force -ErrorAction Stop
+                    Write-Log "Repository removed."
+                    break
+                } catch {
+                    $attempts++
+                    if ($attempts -lt $maxAttempts) {
+                        Write-Log "Attempt $attempts failed, retrying in 2 seconds..."
+                        Start-Sleep -Seconds 2
+                    } else {
+                        Write-Log "WARNING: Could not remove repository after $maxAttempts attempts: $_"
+                        Write-Log "You may need to manually delete: $installDir"
+                    }
+                }
+            }
         } catch {
             Write-Log "WARNING: Could not remove repository: $_"
         }
@@ -230,7 +282,7 @@ function Cleanup-OnFailure {
     if (Test-Path $batFile) {
         try {
             Write-Log "Removing desktop shortcut..."
-            Remove-Item $batFile -Force
+            Remove-Item $batFile -Force -ErrorAction Stop
             Write-Log "Shortcut removed."
         } catch {
             Write-Log "WARNING: Could not remove shortcut: $_"
@@ -240,25 +292,62 @@ function Cleanup-OnFailure {
     Write-Log "Cleanup completed."
 }
 
-# Function to refresh PATH
-function Refresh-Path {
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-
-    # Add common uv locations
+# Function to get uv executable path
+function Get-UvPath {
+    # Common uv installation locations
     $uvPaths = @(
-        "$env:USERPROFILE\.cargo\bin",
-        "$env:USERPROFILE\.local\bin",
-        "$env:APPDATA\Python\Scripts",
-        "$env:LOCALAPPDATA\Programs\Python\Python312\Scripts"
+        "$env:USERPROFILE\.cargo\bin\uv.exe",
+        "$env:USERPROFILE\.local\bin\uv.exe",
+        "$env:APPDATA\Python\Scripts\uv.exe",
+        "$env:LOCALAPPDATA\Programs\Python\Python312\Scripts\uv.exe",
+        "$env:LOCALAPPDATA\Programs\Python\Python311\Scripts\uv.exe",
+        "$env:LOCALAPPDATA\Programs\Python\Python310\Scripts\uv.exe",
+        "C:\Program Files\Python312\Scripts\uv.exe",
+        "C:\Program Files\Python311\Scripts\uv.exe",
+        "C:\Program Files\Python310\Scripts\uv.exe"
     )
 
     foreach ($path in $uvPaths) {
         if (Test-Path $path) {
-            if ($env:Path -notlike "*$path*") {
-                $env:Path += ";$path"
-            }
+            return $path
         }
     }
+
+    return $null
+}
+
+# Function to add directory to PATH permanently
+function Add-ToPath {
+    param([string]$directory)
+
+    if (-not (Test-Path $directory)) {
+        return $false
+    }
+
+    try {
+        # Get current PATH
+        $currentPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+
+        # Check if already in PATH
+        if ($currentPath -notlike "*$directory*") {
+            Write-Log "Adding $directory to PATH..."
+            $newPath = "$directory;$currentPath"
+            [System.Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+            Write-Log "Added to PATH successfully."
+            return $true
+        } else {
+            Write-Log "Already in PATH."
+            return $true
+        }
+    } catch {
+        Write-Log "ERROR: Could not add to PATH: $_"
+        return $false
+    }
+}
+
+# Function to refresh PATH for current session
+function Refresh-Path {
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 }
 
 # Main installation function
@@ -311,51 +400,81 @@ function Start-Installation {
         Update-Progress 30 "Installing uv..."
         Write-Log "Installing uv package manager..."
 
+        $uvPath = $null
+
         if (-not (Test-Command "uv")) {
             try {
-                Write-Log "Downloading uv installer..."
-                $uvInstallScript = Invoke-WebRequest -Uri "https://astral.sh/uv/install.ps1" -UseBasicParsing
-                Write-Log "Running uv installer..."
-                $uvInstallScript.Content | Invoke-Expression
+                # First, try to find if uv is already installed but not in PATH
+                Write-Log "Checking if uv is already installed..."
+                $uvPath = Get-UvPath
 
-                # Refresh PATH multiple times
-                Refresh-Path
-                Start-Sleep -Seconds 5
-                Refresh-Path
-
-                # Verify installation
-                $uvFound = $false
-                for ($i = 0; $i -lt 3; $i++) {
-                    if (Test-Command "uv") {
-                        $uvFound = $true
-                        $uvVersion = uv --version 2>&1
-                        Write-Log "uv installed successfully. Version: $uvVersion"
-                        break
-                    }
-                    Write-Log "Attempt $($i + 1): uv not found in PATH, waiting..."
-                    Start-Sleep -Seconds 3
+                if ($uvPath) {
+                    Write-Log "Found uv at: $uvPath"
+                    Write-Log "Adding uv directory to PATH..."
+                    $uvDir = Split-Path $uvPath -Parent
+                    Add-ToPath -directory $uvDir
                     Refresh-Path
-                }
+                } else {
+                    # Install uv using pip (more reliable)
+                    Write-Log "Installing uv via pip (more reliable method)..."
 
-                if (-not $uvFound) {
-                    Write-Log "WARNING: uv installation completed but command not found in PATH"
-                    Write-Log "Attempting alternative installation method..."
-
-                    # Alternative: Try using pip if available
-                    if (Test-Command "pip") {
-                        Write-Log "Installing uv via pip..."
-                        pip install uv --user
+                    # Ensure pip is available
+                    if (-not (Test-Command "pip")) {
+                        Write-Log "pip not found, installing ensurepip..."
+                        python -m ensurepip --upgrade --default-pip 2>&1 | Out-Null
                         Refresh-Path
-                        Start-Sleep -Seconds 3
+                        Start-Sleep -Seconds 2
+                    }
 
-                        if (Test-Command "uv") {
-                            $uvVersion = uv --version 2>&1
-                            Write-Log "uv installed successfully via pip. Version: $uvVersion"
+                    if (Test-Command "pip") {
+                        Write-Log "Installing uv via pip install --user..."
+                        $pipResult = pip install uv --user 2>&1
+                        Write-Log "pip install result: $pipResult"
+
+                        # Wait for installation to complete
+                        Start-Sleep -Seconds 5
+
+                        # Find where uv was installed
+                        Write-Log "Searching for uv installation..."
+                        $uvPath = Get-UvPath
+
+                        if ($uvPath) {
+                            Write-Log "Found uv at: $uvPath"
+                            $uvDir = Split-Path $uvPath -Parent
+                            Add-ToPath -directory $uvDir
+                            Refresh-Path
+                            Start-Sleep -Seconds 2
+
+                            # Verify it works
+                            $uvVersion = & $uvPath --version 2>&1
+                            Write-Log "uv installed successfully. Version: $uvVersion"
                         } else {
-                            throw "Failed to install uv via both methods"
+                            Write-Log "ERROR: uv installation completed but could not find uv.exe"
+                            Write-Log "Searching in common locations..."
+
+                            # List all Python Scripts directories
+                            $scriptDirs = @(
+                                "$env:APPDATA\Python\Scripts",
+                                "$env:LOCALAPPDATA\Programs\Python\Python312\Scripts",
+                                "$env:LOCALAPPDATA\Programs\Python\Python311\Scripts",
+                                "$env:LOCALAPPDATA\Programs\Python\Python310\Scripts",
+                                "C:\Program Files\Python312\Scripts",
+                                "C:\Program Files\Python311\Scripts"
+                            )
+
+                            foreach ($dir in $scriptDirs) {
+                                if (Test-Path $dir) {
+                                    Write-Log "Contents of $dir:"
+                                    Get-ChildItem $dir -Filter "*.exe" | ForEach-Object {
+                                        Write-Log "  - $($_.Name)"
+                                    }
+                                }
+                            }
+
+                            throw "Could not find uv.exe after installation"
                         }
                     } else {
-                        throw "Failed to install uv and pip not available"
+                        throw "pip not available and could not install ensurepip"
                     }
                 }
             } catch {
@@ -366,7 +485,11 @@ function Start-Installation {
         } else {
             $uvVersion = uv --version 2>&1
             Write-Log "uv is already installed. Version: $uvVersion"
+            $uvPath = "uv"
         }
+
+        # Store uv path for later use
+        $script:uvPath = $uvPath
 
         # Step 3: Install Git
         Update-Progress 40 "Installing Git..."
@@ -561,11 +684,23 @@ ENABLE_FILEPATH_EXTRACTION_MOCK=true
             if (Test-Path $batFile) {
                 Write-Log "Desktop shortcut already exists, skipping creation."
             } else {
+                # Get the directory where uv is installed
+                $uvDir = ""
+                if ($script:uvPath -and (Test-Path $script:uvPath)) {
+                    $uvDir = Split-Path $script:uvPath -Parent
+                    Write-Log "uv directory: $uvDir"
+                }
+
                 $batContent = @"
 @echo off
 setlocal
 
 set "ROOT=%USERPROFILE%\claude-nvidia-proxy"
+
+:: Add uv to PATH if needed
+if exist "$uvDir" (
+    set "PATH=%PATH%;$uvDir"
+)
 
 :: Validations
 if not exist "%ROOT%" (
@@ -623,7 +758,16 @@ claude
 
         try {
             Push-Location $installDir
-            $syncResult = uv sync 2>&1
+
+            # Use the stored uv path
+            if ($script:uvPath -and (Test-Path $script:uvPath)) {
+                Write-Log "Using uv at: $script:uvPath"
+                $syncResult = & $script:uvPath sync 2>&1
+            } else {
+                Write-Log "Using uv from PATH"
+                $syncResult = uv sync 2>&1
+            }
+
             if ($LASTEXITCODE -ne 0) {
                 Write-Log "WARNING: Some dependencies may not have installed: $syncResult"
                 Write-Log "You may need to run 'uv sync' manually in the installation directory"
