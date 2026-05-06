@@ -720,10 +720,63 @@ ENABLE_FILEPATH_EXTRACTION_MOCK=true
             # Use the stored uv path
             if ($script:uvPath -and (Test-Path $script:uvPath)) {
                 Write-Log "Using uv at: $script:uvPath"
+                Write-Log "Running uv sync..."
                 $syncResult = & $script:uvPath sync 2>&1
+                Write-Log "uv sync output: $syncResult"
             } else {
                 Write-Log "Using uv from PATH"
+                Write-Log "Running uv sync..."
                 $syncResult = uv sync 2>&1
+                Write-Log "uv sync output: $syncResult"
+            }
+
+            # Check if virtual environment was created
+            $venvPath = "$installDir\.venv"
+            if (Test-Path $venvPath) {
+                Write-Log "Virtual environment created at: $venvPath"
+                $venvScripts = "$venvPath\Scripts"
+                if (Test-Path $venvScripts) {
+                    Write-Log "Virtual environment Scripts directory found: $venvScripts"
+                    # List some files to verify
+                    $uvicornPath = "$venvScripts\uvicorn.exe"
+                    if (Test-Path $uvicornPath) {
+                        Write-Log "uvicorn.exe found in virtual environment"
+                    } else {
+                        Write-Log "WARNING: uvicorn.exe not found in virtual environment"
+                    }
+                } else {
+                    Write-Log "WARNING: Scripts directory not found in virtual environment"
+                }
+            } else {
+                Write-Log "WARNING: Virtual environment not found at $venvPath"
+                Write-Log "Attempting to create virtual environment explicitly..."
+
+                # Try to create virtual environment explicitly
+                if ($script:uvPath -and (Test-Path $script:uvPath)) {
+                    Write-Log "Running uv venv..."
+                    $venvResult = & $script:uvPath venv 2>&1
+                    Write-Log "uv venv output: $venvResult"
+                } else {
+                    Write-Log "Running uv venv from PATH..."
+                    $venvResult = uv venv 2>&1
+                    Write-Log "uv venv output: $venvResult"
+                }
+
+                # Check again
+                if (Test-Path $venvPath) {
+                    Write-Log "Virtual environment created successfully"
+                    # Now try sync again
+                    Write-Log "Running uv sync again..."
+                    if ($script:uvPath -and (Test-Path $script:uvPath)) {
+                        $syncResult = & $script:uvPath sync 2>&1
+                    } else {
+                        $syncResult = uv sync 2>&1
+                    }
+                    Write-Log "uv sync output: $syncResult"
+                } else {
+                    Write-Log "ERROR: Could not create virtual environment"
+                    throw "Virtual environment creation failed"
+                }
             }
 
             if ($LASTEXITCODE -ne 0) {
@@ -787,8 +840,24 @@ if not exist "%ROOT%" (
 :: Check if virtual environment exists
 if not exist "%ROOT%\.venv\Scripts" (
     echo ERROR: Virtual environment not found at %ROOT%\.venv\Scripts
-    echo Please run 'uv sync' in the installation directory first
-    pause & exit /b 1
+    echo.
+    echo This usually means the installation did not complete successfully.
+    echo.
+    echo Please try one of the following:
+    echo 1. Run the installer again
+    echo 2. Or manually run: cd /d "%ROOT%" && uv sync
+    echo.
+    echo Press any key to exit...
+    pause >nul
+    exit /b 1
+)
+
+:: Verify uvicorn exists in virtual environment
+if not exist "%ROOT%\.venv\Scripts\uvicorn.exe" (
+    echo WARNING: uvicorn.exe not found in virtual environment
+    echo This may cause the server to fail to start.
+    echo.
+    echo Attempting to continue anyway...
 )
 
 :: Kill previous instance if exists
