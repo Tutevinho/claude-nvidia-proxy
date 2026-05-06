@@ -249,13 +249,49 @@ function Start-Installation {
         Write-Log "Installing uv package manager..."
 
         if (-not (Test-Command "uv")) {
-            $installUv = (Invoke-WebRequest -Uri "https://astral.sh/uv/install.ps1" -UseBasicParsing).Content | Invoke-Expression
-            if ($LASTEXITCODE -ne 0) {
-                throw "Error installing uv"
+            try {
+                Write-Log "Downloading uv installer..."
+                $uvInstallScript = Invoke-WebRequest -Uri "https://astral.sh/uv/install.ps1" -UseBasicParsing
+                Write-Log "Running uv installer..."
+                $uvInstallScript.Content | Invoke-Expression
+
+                # Refresh PATH
+                $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+
+                # Wait a moment for PATH to update
+                Start-Sleep -Seconds 3
+
+                # Verify installation
+                if (Test-Command "uv") {
+                    $uvVersion = uv --version 2>&1
+                    Write-Log "uv installed successfully. Version: $uvVersion"
+                } else {
+                    Write-Log "WARNING: uv installation completed but command not found in PATH"
+                    Write-Log "You may need to restart your terminal or system"
+                }
+            } catch {
+                Write-Log "ERROR installing uv: $_"
+                Write-Log "Attempting alternative installation method..."
+
+                # Alternative: Try using pip if available
+                if (Test-Command "pip") {
+                    Write-Log "Installing uv via pip..."
+                    pip install uv --user
+                    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User") + ";" + "$env:USERPROFILE\AppData\Roaming\Python\Scripts"
+                    Start-Sleep -Seconds 2
+
+                    if (Test-Command "uv") {
+                        Write-Log "uv installed successfully via pip."
+                    } else {
+                        throw "Failed to install uv via both methods"
+                    }
+                } else {
+                    throw "Failed to install uv and pip not available"
+                }
             }
-            Write-Log "uv installed successfully."
         } else {
-            Write-Log "uv is already installed."
+            $uvVersion = uv --version 2>&1
+            Write-Log "uv is already installed. Version: $uvVersion"
         }
 
         # Step 3: Clone repository
