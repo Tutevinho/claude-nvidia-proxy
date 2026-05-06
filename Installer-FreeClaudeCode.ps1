@@ -676,8 +676,8 @@ HTTP_CONNECT_TIMEOUT=2
 # Optional server API key (Anthropic-style)
 ANTHROPIC_AUTH_TOKEN=
 
-# Messaging Platform: "telegram" | "discord"
-MESSAGING_PLATFORM=""
+# Messaging Platform: "telegram" | "discord" | "none"
+MESSAGING_PLATFORM="none"
 MESSAGING_RATE_LIMIT=1
 MESSAGING_RATE_WINDOW=1
 
