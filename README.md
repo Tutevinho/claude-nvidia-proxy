@@ -51,10 +51,10 @@ irm https://raw.githubusercontent.com/Tutevinho/claude-nvidia-proxy/main/Uninsta
 
 ## ⏱️ Installation Time
 
-- If you already have Python: ~5-10 minutes
-- If you need Python installed: ~15-20 minutes
+- If you already have Python and Git: ~5-10 minutes
+- If you need Python and/or Git installed: ~15-25 minutes
 
-**Note:** Python installation may take several minutes. Please be patient.
+**Note:** Python and Git installation may take several minutes. Please be patient.
 
 ## 💡 System Requirements
 
