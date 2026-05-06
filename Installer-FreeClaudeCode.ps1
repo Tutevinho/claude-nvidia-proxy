@@ -464,7 +464,7 @@ function Start-Installation {
 
                             foreach ($dir in $scriptDirs) {
                                 if (Test-Path $dir) {
-                                    Write-Log "Contents of $dir:"
+                                    Write-Log "Contents of ${dir}:"
                                     Get-ChildItem $dir -Filter "*.exe" | ForEach-Object {
                                         Write-Log "  - $($_.Name)"
                                     }
