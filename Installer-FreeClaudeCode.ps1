@@ -715,7 +715,28 @@ ENABLE_FILEPATH_EXTRACTION_MOCK=true
         Write-Log "Installing project dependencies..."
 
         try {
-            Push-Location $installDir
+            # Save current directory
+            $currentDir = Get-Location
+
+            # Change to installation directory
+            Write-Log "Changing directory to: $installDir"
+            Set-Location -Path $installDir
+
+            # Verify we're in the right directory
+            $actualDir = Get-Location
+            Write-Log "Current directory: $actualDir"
+
+            # Check if pyproject.toml exists
+            if (Test-Path "pyproject.toml") {
+                Write-Log "pyproject.toml found in current directory"
+            } else {
+                Write-Log "ERROR: pyproject.toml NOT found in current directory"
+                Write-Log "Listing files in current directory:"
+                Get-ChildItem -Force | ForEach-Object {
+                    Write-Log "  - $($_.Name)"
+                }
+                throw "pyproject.toml not found"
+            }
 
             # Use the stored uv path
             if ($script:uvPath -and (Test-Path $script:uvPath)) {
@@ -785,12 +806,19 @@ ENABLE_FILEPATH_EXTRACTION_MOCK=true
             } else {
                 Write-Log "Dependencies installed successfully."
             }
-            Pop-Location
+
+            # Restore original directory
+            Set-Location -Path $currentDir
         } catch {
             Write-Log "ERROR: Failed to install dependencies: $_"
             Write-Log "You may need to run 'uv sync' manually in: $installDir"
             # Don't cleanup on dependency failure, as the installation is mostly complete
             Write-Log "Installation completed with warnings."
+
+            # Restore original directory
+            if ($currentDir) {
+                Set-Location -Path $currentDir
+            }
         }
 
         # Step 8: Create startup script
