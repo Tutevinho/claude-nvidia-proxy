@@ -919,10 +919,6 @@ set "MAX_ATTEMPTS=5"
 set "ATTEMPT=0"
 set "SERVER_STARTED=0"
 
-:: Give server more time to initialize
-echo Initial wait for server initialization...
-timeout /t 10 >nul
-
 :check_server
 set /a "ATTEMPT+=1"
 echo Attempt %ATTEMPT% of %MAX_ATTEMPTS%...
@@ -1004,8 +1000,8 @@ echo 2. Verify your NVIDIA NIM API key is valid
 echo 3. Try running: cd /d "%ROOT%" && uv run uvicorn server:app --host 0.0.0.0 --port 8082
 echo 4. Check Windows Firewall settings for port 8082
 echo.
-echo Press any key to exit...
-pause >nul
+echo This window will close in 5 seconds...
+timeout /t 5 >nul
 exit /b 1
 "@
 
