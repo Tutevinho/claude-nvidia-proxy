@@ -658,7 +658,10 @@ MODEL_SONNET=nvidia_nim/z-ai/glm4.7
 MODEL_HAIKU=nvidia_nim/z-ai/glm4.7
 
 # NIM Settings
-NIM_ENABLE_THINKING=false
+ENABLE_MODEL_THINKING=false
+ENABLE_OPUS_THINKING=false
+ENABLE_SONNET_THINKING=false
+ENABLE_HAIKU_THINKING=false
 
 # Provider config
 PROVIDER_RATE_LIMIT=40
@@ -839,6 +842,19 @@ ENABLE_FILEPATH_EXTRACTION_MOCK=true
                 $batContent = @"
 @echo off
 setlocal
+
+:: Check for administrator privileges
+net session >nul 2>&1
+if %errorLevel% neq 0 (
+    echo.
+    echo WARNING: This script requires administrator privileges.
+    echo.
+    echo Please right-click on ClaudeCode.bat and select "Run as administrator"
+    echo.
+    echo Press any key to exit...
+    pause >nul
+    exit /b 1
+)
 
 set "ROOT=%USERPROFILE%\claude-nvidia-proxy"
 
