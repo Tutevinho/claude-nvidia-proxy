@@ -710,7 +710,37 @@ ENABLE_FILEPATH_EXTRACTION_MOCK=true
             throw
         }
 
-        # Step 7: Create startup script
+        # Step 7: Install dependencies
+        Update-Progress 85 "Installing Python dependencies..."
+        Write-Log "Installing project dependencies..."
+
+        try {
+            Push-Location $installDir
+
+            # Use the stored uv path
+            if ($script:uvPath -and (Test-Path $script:uvPath)) {
+                Write-Log "Using uv at: $script:uvPath"
+                $syncResult = & $script:uvPath sync 2>&1
+            } else {
+                Write-Log "Using uv from PATH"
+                $syncResult = uv sync 2>&1
+            }
+
+            if ($LASTEXITCODE -ne 0) {
+                Write-Log "WARNING: Some dependencies may not have installed: $syncResult"
+                Write-Log "You may need to run 'uv sync' manually in the installation directory"
+            } else {
+                Write-Log "Dependencies installed successfully."
+            }
+            Pop-Location
+        } catch {
+            Write-Log "ERROR: Failed to install dependencies: $_"
+            Write-Log "You may need to run 'uv sync' manually in: $installDir"
+            # Don't cleanup on dependency failure, as the installation is mostly complete
+            Write-Log "Installation completed with warnings."
+        }
+
+        # Step 8: Create startup script
         Update-Progress 90 "Creating shortcuts..."
         Write-Log "Creating startup script..."
 
@@ -803,36 +833,6 @@ claude
             Write-Log "ERROR: Failed to create startup script: $_"
             Cleanup-OnFailure "Startup script creation failed"
             throw
-        }
-
-        # Step 8: Install dependencies
-        Update-Progress 95 "Installing Python dependencies..."
-        Write-Log "Installing project dependencies..."
-
-        try {
-            Push-Location $installDir
-
-            # Use the stored uv path
-            if ($script:uvPath -and (Test-Path $script:uvPath)) {
-                Write-Log "Using uv at: $script:uvPath"
-                $syncResult = & $script:uvPath sync 2>&1
-            } else {
-                Write-Log "Using uv from PATH"
-                $syncResult = uv sync 2>&1
-            }
-
-            if ($LASTEXITCODE -ne 0) {
-                Write-Log "WARNING: Some dependencies may not have installed: $syncResult"
-                Write-Log "You may need to run 'uv sync' manually in the installation directory"
-            } else {
-                Write-Log "Dependencies installed successfully."
-            }
-            Pop-Location
-        } catch {
-            Write-Log "ERROR: Failed to install dependencies: $_"
-            Write-Log "You may need to run 'uv sync' manually in: $installDir"
-            # Don't cleanup on dependency failure, as the installation is mostly complete
-            Write-Log "Installation completed with warnings."
         }
 
         # Successful completion
