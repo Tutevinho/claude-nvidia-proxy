@@ -919,33 +919,42 @@ set "MAX_ATTEMPTS=5"
 set "ATTEMPT=0"
 set "SERVER_STARTED=0"
 
+:: Give server more time to initialize
+echo Initial wait for server initialization...
+timeout /t 10 >nul
+
 :check_server
 set /a "ATTEMPT+=1"
 echo Attempt %ATTEMPT% of %MAX_ATTEMPTS%...
 
-:: Wait 5 seconds
-timeout /t 5 >nul
+:: Check if port 8082 is in use
+netstat -ano | findstr ":8082" >nul 2>&1
+if errorlevel 1 (
+    echo Port 8082 is not in use. Server may not have started.
+    if %ATTEMPT% lss %MAX_ATTEMPTS% (
+        echo Waiting 5 more seconds...
+        timeout /t 5 >nul
+        goto check_server
+    ) else (
+        goto server_failed
+    )
+) else (
+    echo Port 8082 is in use. Checking if server is responding...
+)
+
+:: Wait 3 seconds before checking HTTP response
+timeout /t 3 >nul
 
 :: Check if server is responding
 curl -s -o nul http://localhost:8082 >nul 2>&1
 if errorlevel 1 (
-    echo Server not responding yet...
+    echo Server port is open but not responding to HTTP requests yet...
     if %ATTEMPT% lss %MAX_ATTEMPTS% (
+        echo Waiting 5 more seconds...
+        timeout /t 5 >nul
         goto check_server
     ) else (
-        echo.
-        echo ERROR: Server failed to start after %MAX_ATTEMPTS% attempts.
-        echo.
-        echo Please check the server window for error messages.
-        echo.
-        echo Common issues:
-        echo - Port 8082 may be in use by another application
-        echo - NVIDIA NIM API key may be invalid
-        echo - Dependencies may not be installed correctly
-        echo.
-        echo Press any key to exit...
-        pause >nul
-        exit /b 1
+        goto server_failed
     )
 ) else (
     echo Server is responding!
@@ -967,7 +976,37 @@ if %SERVER_STARTED%==1 (
     echo Opening Claude Code...
     cd /d "%ROOT%"
     claude
+) else (
+    goto server_failed
 )
+
+goto :eof
+
+:server_failed
+echo.
+echo ========================================
+echo ERROR: Server failed to start properly
+echo ========================================
+echo.
+echo The server process may be running but not responding correctly.
+echo.
+echo Please check the "Free Claude Code Server" window for error messages.
+echo.
+echo Common issues:
+echo - Port 8082 may be blocked by Windows Firewall
+echo - NVIDIA NIM API key may be invalid or expired
+echo - Dependencies may not be installed correctly
+echo - Server may have encountered an error during startup
+echo.
+echo Troubleshooting steps:
+echo 1. Check the server window for Python error messages
+echo 2. Verify your NVIDIA NIM API key is valid
+echo 3. Try running: cd /d "%ROOT%" && uv run uvicorn server:app --host 0.0.0.0 --port 8082
+echo 4. Check Windows Firewall settings for port 8082
+echo.
+echo Press any key to exit...
+pause >nul
+exit /b 1
 "@
 
                 $batContent | Out-File -FilePath $batFile -Encoding ASCII
