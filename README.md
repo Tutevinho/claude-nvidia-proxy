@@ -106,7 +106,7 @@ To uninstall:
 
 For detailed instructions, advanced configuration, and more troubleshooting, visit the original project:
 
-**https://github.com/Tutevinho/claude-nvidia-proxy**
+**https://github.com/Alishahryar1/free-claude-code**
 
 ## 🎮 What is Free Claude Code?
 
@@ -119,7 +119,7 @@ Free Claude Code allows you to use Claude Code (Anthropic's CLI) completely FREE
 
 ## 🙏 Credits
 
-- Original project: https://github.com/Tutevinho/claude-nvidia-proxy
+- Original project: https://github.com/Alishahryar1/free-claude-code
 - NVIDIA NIM for the free API
 - Anthropic for Claude Code
 
@@ -132,7 +132,7 @@ For installation issues:
 - Check Windows Defender/Antivirus settings
 
 For claude-nvidia-proxy issues:
-- Visit: https://github.com/Tutevinho/claude-nvidia-proxy/issues
+- Visit: https://github.com/Alishahryar1/free-claude-code/issues
 
 For NVIDIA NIM issues:
 - Visit: https://developer.nvidia.com/

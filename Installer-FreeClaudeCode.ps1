@@ -599,7 +599,7 @@ function Start-Installation {
         }
 
         try {
-            $gitResult = git clone https://github.com/Tutevinho/claude-nvidia-proxy.git $installDir 2>&1
+            $gitResult = git clone https://github.com/Alishahryar1/free-claude-code.git $installDir 2>&1
             if ($LASTEXITCODE -ne 0) {
                 throw "Error cloning repository: $gitResult"
             }
