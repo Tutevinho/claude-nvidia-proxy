@@ -909,6 +909,197 @@ for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":8082 "') do (
     taskkill /PID %%a /F >nul 2>&1
 )
 
+:: Start server in background (no visible window)
+echo Starting Free Claude Code Server in background...
+start /B "" cmd /c "cd /d %ROOT% && .venv\Scripts\uvicorn server:app --host 0.0.0.0 --port 8082" >nul 2>&1
+
+:: Wait for server to start with retries
+echo Waiting for server to start...
+set "MAX_ATTEMPTS=5"
+set "ATTEMPT=0"
+set "SERVER_STARTED=0"
+
+:check_server
+set /a "ATTEMPT+=1"
+echo Attempt %ATTEMPT% of %MAX_ATTEMPTS%...
+
+:: Check if port 8082 is in use
+netstat -ano | findstr ":8082" >nul 2>&1
+if errorlevel 1 (
+    echo Port 8082 is not in use. Server may not have started.
+    if %ATTEMPT% lss %MAX_ATTEMPTS% (
+        echo Waiting 5 more seconds...
+        timeout /t 5 >nul
+        goto check_server
+    ) else (
+        goto server_failed
+    )
+) else (
+    echo Port 8082 is in use. Checking if server is responding...
+)
+
+:: Wait 3 seconds before checking HTTP response
+timeout /t 3 >nul
+
+:: Check if server is responding
+curl -s -o nul http://localhost:8082 >nul 2>&1
+if errorlevel 1 (
+    echo Server port is open but not responding to HTTP requests yet...
+    if %ATTEMPT% lss %MAX_ATTEMPTS% (
+        echo Waiting 5 more seconds...
+        timeout /t 5 >nul
+        goto check_server
+    ) else (
+        goto server_failed
+    )
+) else (
+    echo Server is responding!
+    set "SERVER_STARTED=1"
+)
+
+:: Start Claude in user directory
+if %SERVER_STARTED%==1 (
+    set "ANTHROPIC_AUTH_TOKEN=freecc"
+    set "ANTHROPIC_BASE_URL=http://localhost:8082"
+
+    echo Checking for Node.js and Claude Code CLI...
+    where claude >nul 2>&1
+    if errorlevel 1 (
+        echo "claude" command not found. Installing Claude Code CLI...
+
+        :: Check if Node.js is installed
+        where node >nul 2>&1
+        if errorlevel 1 (
+            echo Node.js not found. Downloading and installing...
+            curl -s -o "%TEMP%\node-installer.msi" https://nodejs.org/dist/v22.14.0/node-v22.14.0-x64.msi
+            if errorlevel 1 (
+                echo ERROR: Failed to download Node.js installer
+                echo Please install Node.js manually from https://nodejs.org
+            ) else (
+                echo Installing Node.js (this may take a moment)...
+                msiexec /i "%TEMP%\node-installer.msi" /qn /norestart
+                echo Waiting for installation to complete...
+                timeout /t 10 >nul
+                del "%TEMP%\node-installer.msi" 2>nul
+            )
+        )
+
+        :: Refresh PATH to pick up Node.js
+        set "PATH=%PATH%;%ProgramFiles%\nodejs;%ProgramFiles(x86)%\nodejs;%APPDATA%\npm"
+
+        :: Install Claude Code CLI
+        call npm install -g @anthropic-ai/claude-code
+        timeout /t 5 >nul
+        set "PATH=%PATH%;%APPDATA%\npm;%ProgramFiles%\nodejs"
+    )
+
+    echo Opening Claude Code...
+    cd /d "%ROOT%"
+    start /B "" cmd /c "claude"
+
+    :: Wait for Claude to exit, then kill server
+    echo Claude Code is running in background. This window will close when Claude exits.
+    :wait_claude
+    timeout /t 3 >nul
+    tasklist /FI "IMAGENAME eq node.exe" 2>nul | find /I /C "node.exe" >nul
+    if errorlevel 1 (
+        tasklist /FI "WINDOWTITLE eq claude*" 2>nul | find /I /C "claude" >nul
+        if errorlevel 1 goto claude_done
+    )
+    goto wait_claude
+
+    :claude_done
+    echo Claude Code has exited. Stopping server...
+    for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":8082 "') do (
+        taskkill /PID %%a /F >nul 2>&1
+    )
+    echo Server stopped. Goodbye!
+    timeout /t 3 >nul
+) else (
+    goto server_failed
+)
+
+goto :eof
+
+:server_failed
+echo.
+echo ========================================
+echo ERROR: Server failed to start properly
+echo ========================================
+echo.
+echo The server process may be running but not responding correctly.
+echo.
+echo Please check the "Free Claude Code Server" window for error messages.
+echo.
+echo Common issues:
+echo - Port 8082 may be blocked by Windows Firewall
+echo - NVIDIA NIM API key may be invalid or expired
+echo - Dependencies may not be installed correctly
+echo - Server may have encountered an error during startup
+echo.
+echo Troubleshooting steps:
+echo 1. Check the server window for Python error messages
+echo 2. Verify your NVIDIA NIM API key is valid
+echo 3. Try running: cd /d "%ROOT%" && uv run uvicorn server:app --host 0.0.0.0 --port 8082
+echo 4. Check Windows Firewall settings for port 8082
+echo.
+echo This window will close in 5 seconds...
+timeout /t 5 >nul
+exit /b 1
+
+set "ROOT=%USERPROFILE%\claude-nvidia-proxy"
+
+:: Add virtual environment Scripts to PATH (most important)
+set "PATH=%ROOT%\.venv\Scripts;%PATH%"
+
+:: Add Python Scripts to PATH
+set "PATH=%PATH%;%APPDATA%\Python\Scripts"
+set "PATH=%PATH%;%APPDATA%\Python\Python312\Scripts"
+set "PATH=%PATH%;%APPDATA%\Python\Python311\Scripts"
+set "PATH=%PATH%;%APPDATA%\Python\Python310\Scripts"
+set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python312\Scripts"
+set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python311\Scripts"
+set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python310\Scripts"
+
+:: Add uv to PATH if needed
+if exist "$uvDir" (
+    set "PATH=%PATH%;$uvDir"
+)
+
+:: Validations
+if not exist "%ROOT%" (
+    echo ERROR: Directory %ROOT% does not exist
+    pause & exit /b 1
+)
+
+:: Check if virtual environment exists
+if not exist "%ROOT%\.venv\Scripts" (
+    echo ERROR: Virtual environment not found at %ROOT%\.venv\Scripts
+    echo.
+    echo This usually means the installation did not complete successfully.
+    echo.
+    echo Please try one of the following:
+    echo 1. Run the installer again
+    echo 2. Or manually run: cd /d "%ROOT%" && uv sync
+    echo.
+    echo Press any key to exit...
+    pause >nul
+    exit /b 1
+)
+
+:: Verify uvicorn exists in virtual environment
+if not exist "%ROOT%\.venv\Scripts\uvicorn.exe" (
+    echo WARNING: uvicorn.exe not found in virtual environment
+    echo This may cause the server to fail to start.
+    echo.
+    echo Attempting to continue anyway...
+)
+
+:: Kill previous instance if exists
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":8082 "') do (
+    taskkill /PID %%a /F >nul 2>&1
+)
+
 :: Start server in separate visible window
 echo Starting Free Claude Code Server...
 start "Free Claude Code Server" cmd /k "cd /d %ROOT% && uv run uvicorn server:app --host 0.0.0.0 --port 8082"
@@ -964,18 +1155,67 @@ if %SERVER_STARTED%==1 (
 
     where claude >nul 2>&1
     if errorlevel 1 (
-        echo ERROR: "claude" command is not installed or not in PATH.
+        echo Checking for Node.js and Claude Code CLI...
+
+        :: Check if Node.js is installed
+        where node >nul 2>&1
+        if errorlevel 1 (
+            echo Node.js not found. Downloading and installing...
+            :: Download Node.js installer
+            curl -s -o "%TEMP%\node-installer.msi" https://nodejs.org/dist/v22.14.0/node-v22.14.0-x64.msi
+            if errorlevel 1 (
+                echo ERROR: Failed to download Node.js installer
+                echo Please install Node.js manually from https://nodejs.org
+            ) else (
+                echo Installing Node.js (this may take a moment)...
+                msiexec /i "%TEMP%\node-installer.msi" /qn /norestart
+                echo Waiting for installation to complete...
+                timeout /t 10 >nul
+                del "%TEMP%\node-installer.msi" 2>nul
+            )
+        )
+
+        :: Refresh PATH to pick up Node.js
+        set "PATH=%PATH%;%ProgramFiles%\nodejs;%ProgramFiles(x86)%\nodejs;%APPDATA%\npm"
+
+        :: Install Claude Code CLI
         echo Installing Claude Code CLI...
-        npm install -g @anthropic-ai/claude-code
+        call npm install -g @anthropic-ai/claude-code
+
+        :: Wait for npm install to complete
+        timeout /t 5 >nul
+
+        :: Refresh PATH again
+        set "PATH=%PATH%;%APPDATA%\npm;%ProgramFiles%\nodejs"
     )
+
+    :: Start server in background (invisible, no window)
+    echo Starting server in background...
+    start /B "" cmd /c "cd /d %ROOT% && .venv\Scripts\uvicorn server:app --host 0.0.0.0 --port 8082" >nul 2>&1
+
+    :: Wait briefly for server
+    timeout /t 3 >nul
 
     echo Opening Claude Code...
     cd /d "%ROOT%"
-    claude
+    start /B "" cmd /c "claude"
     
-    echo.
-    echo Claude Code has exited. This window will close in 10 seconds...
-    timeout /t 10 >nul
+    :: Wait for Claude to exit
+    echo Claude Code is running. This window will close when Claude exits.
+    :wait_claude
+    timeout /t 2 >nul
+    tasklist /FI "IMAGENAME eq node.exe" 2>nul | find /I /C "node" >nul
+    if errorlevel 1 (
+        :: Check if claude process is still running
+        tasklist /FI "IMAGENAME eq claude.exe" 2>nul | find /I /C "claude" >nul
+        if errorlevel 1 (
+            goto claude_done
+        )
+    )
+    goto wait_claude
+    
+    :claude_done
+    echo Claude Code has exited. Stopping server and closing this window...
 ) else (
     goto server_failed
 )
