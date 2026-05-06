@@ -972,6 +972,10 @@ if %SERVER_STARTED%==1 (
     echo Opening Claude Code...
     cd /d "%ROOT%"
     claude
+    
+    echo.
+    echo Claude Code has exited. This window will close in 10 seconds...
+    timeout /t 10 >nul
 ) else (
     goto server_failed
 )
