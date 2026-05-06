@@ -731,6 +731,15 @@ setlocal
 
 set "ROOT=%USERPROFILE%\claude-nvidia-proxy"
 
+:: Add Python Scripts to PATH
+set "PATH=%PATH%;%APPDATA%\Python\Scripts"
+set "PATH=%PATH%;%APPDATA%\Python\Python312\Scripts"
+set "PATH=%PATH%;%APPDATA%\Python\Python311\Scripts"
+set "PATH=%PATH%;%APPDATA%\Python\Python310\Scripts"
+set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python312\Scripts"
+set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python311\Scripts"
+set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python310\Scripts"
+
 :: Add uv to PATH if needed
 if exist "$uvDir" (
     set "PATH=%PATH%;$uvDir"

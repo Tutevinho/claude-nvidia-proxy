@@ -262,8 +262,14 @@ $cancelButton.Add_Click({
 })
 $form.Controls.Add($cancelButton)
 
-# Initially hide uninstall button
-$uninstallButton.Visible = $false
+# Set initial button visibility based on checkbox states
+if ($deleteDirCheckBox.Checked -or $deleteShortcutCheckBox.Checked) {
+    $uninstallButton.Visible = $true
+    $cancelButton.Visible = $false
+} else {
+    $uninstallButton.Visible = $false
+    $cancelButton.Visible = $true
+}
 
 # Checkbox change events
 $deleteDirCheckBox.Add_CheckedChanged({
