@@ -1,5 +1,5 @@
 # OpenCode CLI Graphical Installer for Windows 11
-# Complete installation with graphical interface using Google Gemini API
+# Native installation without proxy - Direct Google Gemini Integration
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -25,7 +25,7 @@ $form.Controls.Add($titleLabel)
 
 # Description
 $descLabel = New-Object System.Windows.Forms.Label
-$descLabel.Text = "This installer will set up everything you need to run OpenCode CLI using Google Gemini API."
+$descLabel.Text = "This installer will set up OpenCode CLI natively on your system using Google Gemini API."
 $descLabel.Location = New-Object System.Drawing.Point(20, 70)
 $descLabel.Size = New-Object System.Drawing.Size(610, 30)
 $descLabel.TextAlign = "MiddleCenter"
@@ -126,7 +126,7 @@ function Get-GoogleAPIKey {
     $keyForm.BackColor = [System.Drawing.Color]::FromArgb(240, 240, 240)
 
     $infoLabel = New-Object System.Windows.Forms.Label
-    $infoLabel.Text = "To get your FREE Google Gemini API Key:`r`n`r`n1. Go to: https://aistudio.google.com/app/apikey`r`n2. Sign in with your Google account`r`n3. Click 'Create API key' or copy your existing one`r`n4. Copy and paste the key below"
+    $infoLabel.Text = "To get your FREE Google Gemini API Key:`r`n`r`n1. Go to: https://aistudio.google.com/app/apikey`r`n2. Sign in with your Google account`r`n3. Create an API Key`r`n4. Copy and paste the key below"
     $infoLabel.Location = New-Object System.Drawing.Point(20, 20)
     $infoLabel.Size = New-Object System.Drawing.Size(510, 140)
     $infoLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9)
@@ -195,160 +195,105 @@ function Get-GoogleAPIKey {
     return $null
 }
 
-function Cleanup-OnFailure {
-    param([string]$reason)
-    Write-Log "=========================================="
-    Write-Log "INSTALLATION FAILED: $reason"
-    Write-Log "Cleaning up..."
-    Write-Log "=========================================="
-    $installDir = "$env:USERPROFILE\opencode-gemini-proxy"
-    $batFile = "$env:USERPROFILE\Desktop\OpenCodeCLI.bat"
-    try {
-        $processes = Get-NetTCPConnection -LocalPort 8082 -ErrorAction SilentlyContinue
-        if ($processes) {
-            foreach ($proc in $processes) {
-                Stop-Process -Id $proc.OwningProcess -Force -ErrorAction SilentlyContinue
-            }
-        }
-        if (Test-Path $installDir) {
-            Remove-Item $installDir -Recurse -Force
-        }
-        if (Test-Path $batFile) {
-            Remove-Item $batFile -Force
-        }
-    } catch { Write-Log "WARNING: Cleanup error: $_" }
-    Write-Log "Cleanup completed."
-}
-
-function Get-UvPath {
-    $uvPaths = @("$env:USERPROFILE\.cargo\bin\uv.exe", "$env:USERPROFILE\.local\bin\uv.exe", "$env:APPDATA\Python\Scripts\uv.exe", "$env:LOCALAPPDATA\Programs\Python\Python312\Scripts\uv.exe")
-    foreach ($path in $uvPaths) { if (Test-Path $path) { return $path } }
-    return $null
-}
-
-function Add-ToPath {
-    param([string]$directory)
-    if (-not (Test-Path $directory)) { return $false }
-    try {
-        $currentPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
-        if ($currentPath -notlike "*$directory*") {
-            [System.Environment]::SetEnvironmentVariable("Path", "$directory;$currentPath", "User")
-            return $true
-        }
-        return $true
-    } catch { return $false }
-}
-
-function Refresh-Path {
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-}
-
 function Start-Installation {
     $installButton.Enabled = $false
     $installButton.Text = "Installing..."
     $installButton.BackColor = [System.Drawing.Color]::FromArgb(150, 150, 150)
-    $installDir = "$env:USERPROFILE\opencode-gemini-proxy"
-    $batFile = "$env:USERPROFILE\Desktop\OpenCodeCLI.bat"
+
     try {
-        Update-Progress 10 "Checking Python..."
-        if (-not (Test-Command "python")) {
-            Update-Progress 15 "Downloading Python..."
-            $pythonUrl = "https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe"
-            $pythonInstaller = "$env:TEMP\python-installer.exe"
-            if (-not (Download-File $pythonUrl $pythonInstaller)) { throw "Could not download Python" }
-            Update-Progress 20 "Installing Python..."
-            Start-Process $pythonInstaller -ArgumentList "/quiet", "InstallAllUsers=1", "PrependPath=1", "Include_test=0" -Wait
-            Refresh-Path
+        # Step 1: Check/Install Node.js (Required for OpenCode CLI)
+        Update-Progress 10 "Checking Node.js..."
+        Write-Log "Checking Node.js installation..."
+
+        if (-not (Test-Command "node")) {
+            Write-Log "Node.js not found. Downloading installer..."
+            Update-Progress 15 "Downloading Node.js..."
+
+            # Using Node.js v22 LTS
+            $nodeUrl = "https://nodejs.org/dist/v22.14.0/node-v22.14.0-x64.msi"
+            $nodeInstaller = "$env:TEMP\node-installer.msi"
+
+            if (-not (Download-File $nodeUrl $nodeInstaller)) {
+                throw "Could not download Node.js"
+            }
+
+            Write-Log "Installing Node.js (this may take several minutes)..."
+            Update-Progress 20 "Installing Node.js..."
+
+            $process = Start-Process msiexec.exe -ArgumentList "/i `"$nodeInstaller`" /qn /norestart" -Wait -PassThru
+
+            if ($process.ExitCode -ne 0) {
+                throw "Error installing Node.js"
+            }
+
+            Write-Log "Node.js installed successfully."
+            Remove-Item $nodeInstaller -Force
+            
+            # We need to refresh PATH for the current process
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+            Start-Sleep -Seconds 3
+        } else {
+            $nodeVersion = node -v 2>&1
+            Write-Log "Node.js found: $nodeVersion"
         }
-        Update-Progress 30 "Installing uv..."
-        if (-not (Test-Command "uv")) {
-            python -m ensurepip --upgrade --default-pip 2>&1 | Out-Null
-            pip install uv --user 2>&1 | Out-Null
-            $uvPath = Get-UvPath
-            if ($uvPath) { Add-ToPath -directory (Split-Path $uvPath -Parent); Refresh-Path }
+
+        # Step 2: Install OpenCode CLI via npm
+        Update-Progress 30 "Installing OpenCode CLI..."
+        Write-Log "Installing opencode-ai via npm..."
+
+        if (-not (Test-Command "npm")) {
+             throw "npm not found. Please install Node.js manually from https://nodejs.org"
         }
-        Update-Progress 40 "Installing Git..."
-        if (-not (Test-Command "git")) {
-            $gitUrl = "https://github.com/git-for-windows/git/releases/download/v2.47.0.windows.1/Git-2.47.0-64-bit.exe"
-            $gitInstaller = "$env:TEMP\git-installer.exe"
-            Download-File $gitUrl $gitInstaller
-            Start-Process $gitInstaller -ArgumentList "/VERYSILENT", "/NORESTART" -Wait
-            Refresh-Path
+
+        $npmResult = npm install -g opencode-ai@latest 2>&1
+        Write-Log "npm install result: $npmResult"
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "Error installing OpenCode CLI via npm"
         }
-        Update-Progress 50 "Downloading OpenCode Proxy..."
-        if (Test-Path $installDir) { Remove-Item $installDir -Recurse -Force }
-        git clone https://github.com/Alishahryar1/free-claude-code.git $installDir
-        Update-Progress 70 "Configuring API Key..."
+
+        # Step 3: Request Google API Key
+        Update-Progress 60 "Configuring API Key..."
+        Write-Log "Requesting Google Gemini API Key..."
+
         $apiKey = Get-GoogleAPIKey
-        if ([string]::IsNullOrEmpty($apiKey)) { throw "No API Key provided" }
-        Update-Progress 80 "Configuring environment..."
-        $envContent = @"
-# Google Config
-GOOGLE_API_KEY="$apiKey"
-# OpenRouter Config
-OPENROUTER_API_KEY=""
-# LM Studio Config
-LM_STUDIO_BASE_URL="http://localhost:1234/v1"
-# Model mapping
-MODEL="google/gemma-4-31b-it"
-MODEL_OPUS="google/gemma-4-31b-it"
-MODEL_SONNET="google/gemma-4-31b-it"
-MODEL_HAIKU="google/gemma-4-31b-it"
-PROVIDER_RATE_LIMIT=40
-PROVIDER_RATE_WINDOW=60
-PROVIDER_MAX_CONCURRENCY=5
-HTTP_READ_TIMEOUT=120
-HTTP_WRITE_TIMEOUT=10
-HTTP_CONNECT_TIMEOUT=2
-MESSAGING_PLATFORM="none"
-CLAUDE_WORKSPACE="./agent_workspace"
-"@
-        $envContent | Out-File -FilePath "$installDir\.env" -Encoding UTF8
-        Update-Progress 85 "Installing dependencies..."
-        Set-Location -Path $installDir
-        uv sync 2>&1 | Out-Null
-        Set-Location -Path $env:USERPROFILE
-        Update-Progress 90 "Creating shortcuts..."
+        if ([string]::IsNullOrEmpty($apiKey)) {
+            throw "No API Key provided"
+        }
+
+        # Step 4: Set Permanent Environment Variable
+        Update-Progress 80 "Setting environment variable..."
+        Write-Log "Setting GOOGLE_API_KEY in User environment..."
+        
+        [System.Environment]::SetEnvironmentVariable("GOOGLE_API_KEY", $apiKey, "User")
+        
+        # Also set it for the current session
+        $env:GOOGLE_API_KEY = $apiKey
+        Write-Log "GOOGLE_API_KEY set successfully."
+
+        # Step 5: Create Desktop Shortcut
+        Update-Progress 90 "Creating shortcut..."
+        Write-Log "Creating OpenCodeCLI.bat on desktop..."
+
+        $batFile = "$env:USERPROFILE\Desktop\OpenCodeCLI.bat"
         $batContent = @"
 @echo off
-setlocal
-net session >nul 2>&1
-if %errorLevel% neq 0 (
-    echo Please run as administrator.
-    pause & exit /b 1
-)
-set "ROOT=%USERPROFILE%\opencode-gemini-proxy"
-set "PATH=%ROOT%\.venv\Scripts;%PATH%"
-set "PATH=%PATH%;%APPDATA%\Python\Scripts"
-for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":8082 "') do taskkill /PID %%a /F >nul 2>&1
-echo Starting OpenCode CLI Server...
-start /B "" cmd /c "cd /d %ROOT% && .venv\Scripts\uvicorn server:app --host 0.0.0.0 --port 8082" >nul 2>&1
-timeout /t 5 >nul
-set "ANTHROPIC_AUTH_TOKEN=freecc"
-set "ANTHROPIC_BASE_URL=http://localhost:8082"
-echo Opening OpenCode CLI...
-cd /d "%ROOT%"
-start /B "" cmd /c "claude"
-echo OpenCode CLI is running. This window will close when it exits.
-:wait_claude
-timeout /t 3 >nul
-tasklist /FI "IMAGENAME eq node.exe" 2>nul | find /I /C "node" >nul
-if errorlevel 1 (
-    tasklist /FI "IMAGENAME eq claude.exe" 2>nul | find /I /C "claude" >nul
-    if errorlevel 1 goto claude_done
-)
-goto wait_claude
-:claude_done
-for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":8082 "') do taskkill /PID %%a /F >nul 2>&1
-exit /b 0
+echo Launching OpenCode CLI...
+set "GOOGLE_API_KEY=$apiKey"
+start cmd /k "opencode"
 "@
         $batContent | Out-File -FilePath $batFile -Encoding ASCII
+        Write-Log "Desktop shortcut created."
+
         Update-Progress 100 "Installation completed!"
-        [System.Windows.Forms.MessageBox]::Show("Installation completed successfully!`n`nTo use OpenCode CLI:`n1. Double-click 'OpenCodeCLI.bat' on your Desktop`n2. Wait for the server to start`n3. OpenCode CLI will open automatically", "Success")
+        [System.Windows.Forms.MessageBox]::Show("Installation completed successfully!`n`nTo use OpenCode CLI:`n1. Double-click 'OpenCodeCLI.bat' on your Desktop`n2. The CLI will open automatically", "Success")
+
     } catch {
         Update-Progress 100 "Error"
-        Cleanup-OnFailure $_
-        [System.Windows.Forms.MessageBox]::Show("Error: $_", "Installation Error")
+        Write-Log "=========================================="
+        Write-Log "ERROR: $_"
+        Write-Log "=========================================="
+        [System.Windows.Forms.MessageBox]::Show("Error during installation:`n`n$_", "Installation Error")
         $installButton.Enabled = $true
         $installButton.Text = "Retry Installation"
     }
