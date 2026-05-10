@@ -250,7 +250,8 @@ function Start-Installation {
              throw "npm not found. Please install Node.js manually from https://nodejs.org"
         }
 
-        $npmResult = npm install -g opencode-ai@latest 2>&1
+        # Use cmd /c to ensure npm is called correctly and environment is picked up
+        $npmResult = cmd /c "npm install -g opencode-ai@latest" 2>&1
         Write-Log "npm install result: $npmResult"
 
         if ($LASTEXITCODE -ne 0) {
@@ -285,6 +286,8 @@ function Start-Installation {
 @echo off
 echo Launching OpenCode CLI...
 set "GOOGLE_API_KEY=$apiKey"
+:: Ensure npm global bin is in PATH
+set "PATH=%APPDATA%\npm;%PATH%"
 start cmd /k "opencode"
 "@
         $batContent | Out-File -FilePath $batFile -Encoding ASCII
