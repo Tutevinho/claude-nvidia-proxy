@@ -7,7 +7,7 @@
 Copy and paste this command in PowerShell (Run as Administrator):
 
 ```powershell
-irm https://raw.githubusercontent.com/Tutevinho/opencode-gemini-installer/main/Installer-OpenCodeCLI.ps1 | iex
+irm https://raw.githubusercontent.com/Tutevinho/claude-nvidia-proxy/main/Installer-OpenCodeCLI.ps1 | iex
 ```
 
 ### 🗑️ Uninstall with One Command
@@ -15,28 +15,21 @@ irm https://raw.githubusercontent.com/Tutevinho/opencode-gemini-installer/main/I
 Copy and paste this command in PowerShell (Run as Administrator):
 
 ```powershell
-irm https://raw.githubusercontent.com/Tutevinho/opencode-gemini-installer/main/Uninstaller-OpenCodeCLI.ps1 | iex
+irm https://raw.githubusercontent.com/Tutevinho/claude-nvidia-proxy/main/Uninstaller-OpenCodeCLI.ps1 | iex
 ```
 
 ---
 
 ## 🚀 Quick Start
 
-### 3 Simple Steps to Get Started:
+### 2 Simple Steps to Get Started:
 
-1. **Get Your Free Google Gemini API Key**
-   - Go to: https://aistudio.google.com/app/apikey
-   - Sign in with your Google account
-   - Create an API Key
-   - The key will look like: `AIzaSyxxxxxxxxxxxx`
-
-2. **Run the Installer**
+1. **Run the Installer**
    - Right-click on `Install-OpenCodeCLI.bat`
    - Select "Run as administrator"
    - Follow the graphical installer prompts
-   - Paste your API Key when requested
 
-3. **Start Using!**
+2. **Start Using!**
    - Double-click on `OpenCodeCLI.bat` on your desktop
    - OpenCode CLI will launch automatically in your terminal
 
@@ -68,8 +61,7 @@ The installer will automatically set up:
 
 1. **Node.js v22 LTS** - If not already installed
 2. **OpenCode CLI** - Installed globally via npm (`opencode-ai`)
-3. **GOOGLE_API_KEY** - Set as a permanent user environment variable
-4. **OpenCodeCLI.bat** - Desktop shortcut for easy access
+3. **OpenCodeCLI.bat** - Desktop shortcut for easy access
 
 ## 🗑️ Uninstallation
 
@@ -77,7 +69,6 @@ To uninstall:
 
 1. Run `Uninstall-OpenCodeCLI.bat` as administrator
 2. Confirm uninstallation
-3. The binary and environment variables will be removed
 
 ## ⚠️ Troubleshooting
 
@@ -88,10 +79,6 @@ To uninstall:
 ### "npm not found"
 - The installer will install Node.js automatically. If it fails, download Node.js from: https://nodejs.org/en/download
 
-### "Invalid API Key"
-- Make sure it's a valid Google Gemini API Key from AI Studio
-- Check for extra spaces
-
 ## 📚 Documentation
 
 For more info on how to use OpenCode, visit:
@@ -101,7 +88,7 @@ For more info on how to use OpenCode, visit:
 
 OpenCode is the open source AI coding agent. It allows you to write code in your terminal with full context, LSP support, and multi-agent capabilities.
 
-- ✅ Native support for Google Gemini, Claude, GPT, and local models
+- ✅ Provider agnostic (supports Claude, GPT, Gemini, and local models)
 - ✅ Built-in LSP for better code understanding
 - ✅ Open source and privacy-first
 - ✅ High performance in the terminal
@@ -109,7 +96,6 @@ OpenCode is the open source AI coding agent. It allows you to write code in your
 ## 🙏 Credits
 
 - OpenCode Team: https://github.com/anomalyco/opencode
-- Google Gemini API for the powerful AI backend
 
 ## 📞 Support
 
@@ -123,8 +109,6 @@ For installation issues:
 This installer:
 - Does not collect any personal data
 - Only downloads necessary software from official sources
-- Stores your Google API Key locally in your system environment variables
-- Does not share your API Key with anyone
 
 ## 📄 License
 
@@ -134,6 +118,5 @@ This installer is provided as-is without warranty of any kind.
 
 **Ready to get started? 🚀**
 
-1. Get your API Key: https://aistudio.google.com/app/apikey
-2. Run: Install-OpenCodeCLI.bat (as administrator)
-3. Enjoy OpenCode CLI!
+1. Run: Install-OpenCodeCLI.bat (as administrator)
+2. Enjoy OpenCode CLI!

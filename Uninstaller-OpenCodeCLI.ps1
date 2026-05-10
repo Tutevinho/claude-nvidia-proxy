@@ -8,7 +8,7 @@ $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
 
 $label = New-Object System.Windows.Forms.Label
-$label.Text = "Are you sure you want to uninstall OpenCode CLI?`nThis will remove the binary and the API key environment variable."
+$label.Text = "Are you sure you want to uninstall OpenCode CLI?`nThis will remove the binary and the desktop shortcut."
 $label.Location = New-Object System.Drawing.Point(20, 30)
 $label.Size = New-Object System.Drawing.Size(360, 60)
 $label.TextAlign = "MiddleCenter"
@@ -30,16 +30,9 @@ $form.Controls.Add($noButton)
 
 if ($form.ShowDialog() -eq "OK") {
     try {
-        # Uninstall binary
         npm uninstall -g opencode-ai
-        
-        # Remove env var
-        [System.Environment]::SetEnvironmentVariable("GOOGLE_API_KEY", $null, "User")
-        
-        # Remove shortcut
         $batFile = "$env:USERPROFILE\Desktop\OpenCodeCLI.bat"
         if (Test-Path $batFile) { Remove-Item $batFile -Force }
-        
         [System.Windows.Forms.MessageBox]::Show("OpenCode CLI has been successfully uninstalled.", "Success")
     } catch {
         [System.Windows.Forms.MessageBox]::Show("Error during uninstall: $_", "Error")
