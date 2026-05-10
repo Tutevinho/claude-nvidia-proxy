@@ -201,6 +201,11 @@ function Start-Installation {
     $installButton.BackColor = [System.Drawing.Color]::FromArgb(150, 150, 150)
 
     try {
+        # Step 0: Set Execution Policy for the current session to allow npm scripts
+        Write-Log "Configuring PowerShell Execution Policy..."
+        Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
+        Write-Log "Execution Policy set to Bypass for this session."
+
         # Step 1: Check/Install Node.js (Required for OpenCode CLI)
         Update-Progress 10 "Checking Node.js..."
         Write-Log "Checking Node.js installation..."
