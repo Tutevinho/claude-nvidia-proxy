@@ -7,7 +7,7 @@
 Copy and paste this command in PowerShell (Run as Administrator):
 
 ```powershell
-irm https://raw.githubusercontent.com/Tutevinho/claude-nvidia-proxy/main/Installer-OpenCodeCLI.ps1 | iex
+irm https://raw.githubusercontent.com/Tutevinho/opencode-gemini-installer/main/Installer-OpenCodeCLI.ps1 | iex
 ```
 
 ### 🗑️ Uninstall with One Command
@@ -15,7 +15,7 @@ irm https://raw.githubusercontent.com/Tutevinho/claude-nvidia-proxy/main/Install
 Copy and paste this command in PowerShell (Run as Administrator):
 
 ```powershell
-irm https://raw.githubusercontent.com/Tutevinho/claude-nvidia-proxy/main/Uninstaller-OpenCodeCLI.ps1 | iex
+irm https://raw.githubusercontent.com/Tutevinho/opencode-gemini-installer/main/Uninstaller-OpenCodeCLI.ps1 | iex
 ```
 
 ---
